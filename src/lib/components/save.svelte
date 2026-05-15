@@ -9,7 +9,7 @@
     attempts = -1,
     settings = settingsDefault
 
-  import { fade } from 'svelte/transition'
+  import { fade, fly } from 'svelte/transition'
   import { onMount, getContext } from 'svelte'
   import {
     activeGame,
@@ -21,10 +21,11 @@
     IDS
   } from '$lib/store'
   import day from '$lib/utils/date'
+  import { compress } from '$lib/utils/codec'
 
   import { NuzlockeStates } from '$lib/data/states'
-  import { Bin, Download, Share } from '$icons'
-  import { Icon, PIcon, IconButton, Logo as Picture } from '$c/core'
+  import { Bin, Card, Download, Link, Share } from '$icons'
+  import { Icon, PIcon, IconButton, Tooltip, Logo as Picture } from '$c/core'
 
   let ShareModal
   onMount((_) => {
@@ -74,6 +75,50 @@
 
   const { open } = getContext('simple-modal')
   const onshare = (_) => open(ShareModal, { id })
+
+  let copied = false
+  let copytimeout
+
+  const flashcopy = () => {
+    copied = true
+    clearTimeout(copytimeout)
+    copytimeout = setTimeout(() => (copied = false), 1500)
+  }
+
+  const onbackuplink = async () => {
+    const gameData = JSON.parse(window.localStorage.getItem(IDS.game(id)) || '{}')
+    const save = { id, name, game, attempts, settings, created, updated }
+    const encoded = await compress({ save, data: gameData })
+    navigator.clipboard.writeText(`${window.location.origin}/drop#${encoded}`)
+    flashcopy()
+  }
+
+  const onsharecard = async () => {
+    const raw = JSON.parse(window.localStorage.getItem(IDS.game(id)) || '{}')
+    const { __team = [], __teams = [], ...entries } = raw
+
+    const team = __team
+      .map((locId) => {
+        const p = entries[locId]
+        return p?.pokemon ? { pokemon: p.pokemon, nickname: p.nickname, location: locId } : null
+      })
+      .filter(Boolean)
+
+    const dead = Object.values(entries)
+      .filter((p) => p?.pokemon && p.status === 5)
+      .map((p) => ({ pokemon: p.pokemon, nickname: p.nickname, location: p.location }))
+
+    const beaten = Object.values(
+      __teams.reduce(
+        (acc, b) => ({ ...acc, [b.id]: { id: b.id, name: b.name, type: b.type, group: b.group } }),
+        {}
+      )
+    )
+
+    const encoded = await compress({ meta: { name, game, attempts }, team, dead, beaten })
+    navigator.clipboard.writeText(`${window.location.origin}/share#${encoded}`)
+    flashcopy()
+  }
 
   $: date = day(+created).format('Do of MMMM')
   $: last = updated > created ? day(+updated).format('Do of MMMM') : null
@@ -170,6 +215,25 @@
       />
     </a>
 
+    <span>
+      <Tooltip>Copies a self-contained link — bookmark it or save it somewhere safe to restore this run from any browser, no account needed.</Tooltip>
+      <IconButton
+        rounded
+        color="yellow"
+        src={Link}
+        title="Copy backup link"
+        on:click={onbackuplink}
+      />
+    </span>
+
+    <IconButton
+      rounded
+      color="yellow"
+      src={Card}
+      title="Share run card"
+      on:click={onsharecard}
+    />
+
     <IconButton
       rounded
       color="yellow"
@@ -179,3 +243,17 @@
     />
   </div>
 </div>
+
+{#if copied}
+  <div
+    transition:fly={{ y: 50 }}
+    class="fixed bottom-0 left-0 z-50 w-full px-4 md:left-1/2 md:w-auto md:-translate-x-1/2"
+  >
+    <div
+      class="inline-flex w-full max-w-sm justify-center rounded-t-lg bg-green-100 px-6 py-2 font-bold text-green-600"
+    >
+      <Icon inline={true} icon={Link} height="1.4em" class="mr-2 fill-current" />
+      Copied to clipboard
+    </div>
+  </div>
+{/if}

@@ -55,6 +55,7 @@ export {
   default as Heart
 } from '@iconify-icons/ph/heart-straight-fill'
 export { default as Spe } from '@iconify-icons/ph/lightning-fill'
+export { default as Card } from '@iconify-icons/ph/identification-card'
 export { default as Link } from '@iconify-icons/ph/link'
 export { default as Map } from '@iconify-icons/ph/map-trifold'
 // Light & Dark mode

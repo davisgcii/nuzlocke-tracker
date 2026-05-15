@@ -3,17 +3,18 @@
   import { browser } from '$app/environment'
   import { fade, slide } from 'svelte/transition'
 
-  import { Loader, Tabs } from '$lib/components/core'
+  import { Loader, Tabs, IconButton } from '$lib/components/core'
 
   import { SupportBanner } from '$lib/components/navs'
   import { GameRoute, Search } from '$lib/components/Game'
   import { Settings } from '$lib/components/Settings'
 
   import Icon from '@iconify/svelte/dist/OfflineIcon.svelte'
-  import { Arrow, Hide } from '$icons'
+  import { Arrow, Floppy, Hide, Link, Share } from '$icons'
 
   import deferStyles from '$lib/utils/defer-styles'
   import debounce from '$lib/utils/debounce'
+  import { compress } from '$lib/utils/codec'
 
   import { Expanded as Games } from '$lib/data/games.js'
   import {
@@ -106,6 +107,44 @@
 
   const _onsearch = (e) => (search = e.detail.search)
   const onsearch = debounce(_onsearch, 350)
+
+  const onbackuplink = async () => {
+    const [data, , , save] = readdata()
+    const encoded = await compress({ save, data })
+    navigator.clipboard.writeText(`${window.location.origin}/drop#${encoded}`)
+  }
+
+  const onsharecard = async () => {
+    const [rawData, , , save] = readdata()
+    const data = Array.isArray(rawData) ? {} : rawData
+    const { __team = [], __teams = [], ...entries } = data
+
+    const team = __team
+      .map((locId) => {
+        const p = entries[locId]
+        return p?.pokemon ? { pokemon: p.pokemon, nickname: p.nickname, location: locId } : null
+      })
+      .filter(Boolean)
+
+    const dead = Object.values(entries)
+      .filter((p) => p?.pokemon && p.status === 5)
+      .map((p) => ({ pokemon: p.pokemon, nickname: p.nickname, location: p.location }))
+
+    const beaten = Object.values(
+      __teams.reduce(
+        (acc, b) => ({ ...acc, [b.id]: { id: b.id, name: b.name, type: b.type, group: b.group } }),
+        {}
+      )
+    )
+
+    const encoded = await compress({
+      meta: { name: save.name, game: save.game, attempts: save.attempts },
+      team,
+      dead,
+      beaten
+    })
+    navigator.clipboard.writeText(`${window.location.origin}/share#${encoded}`)
+  }
 
   const latestnav = (routes, game) => {
     const custom = (game?.__custom || []).reduce(
@@ -200,8 +239,30 @@
             {/if}
           </div>
 
-          <div class="inline-flex">
-            <Settings />
+          <div class="absolute top-14 right-4 inline-flex items-center gap-2 md:relative md:top-auto md:right-auto">
+            <IconButton
+              rounded
+              color="yellow"
+              title="Copy backup link"
+              on:click={onbackuplink}
+            >
+              <svelte:fragment slot="icon">
+                <span class="relative m-1.5 flex h-5 w-5 items-center justify-center">
+                  <Icon inline={true} icon={Floppy} class="h-4 w-4 fill-current grayscale group-hover:grayscale-0" />
+                  <Icon inline={true} icon={Link} class="absolute -bottom-1 -right-1 h-3 w-3 fill-current grayscale group-hover:grayscale-0" />
+                </span>
+              </svelte:fragment>
+            </IconButton>
+
+            <IconButton
+              rounded
+              color="yellow"
+              src={Share}
+              title="Share run card"
+              on:click={onsharecard}
+            />
+
+            <Settings class="relative" />
 
             <div class="fixed bottom-6 max-md:z-[8888] md:relative md:bottom-0">
               <Search on:search={onsearch} />
